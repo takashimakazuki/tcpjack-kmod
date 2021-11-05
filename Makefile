@@ -4,7 +4,8 @@ UNAME := $(shell uname -r)
 obj-m := $(MODULE_NAME).o
 $(MODULE_NAME)-y := src/main.o
 clean-files := *.o *.ko *.mod.[co] *~
-ccflags-y += -O2 -Wall -I$(src)/include
+ccflags-y += -O2 -Wall 
+KDIR := //usr/src/linux-headers-5.11.0-1020-aws/
 
 .PHONY: all clean install_files install test
 

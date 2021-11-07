@@ -8,6 +8,15 @@
 #include <linux/random.h>
 #include <net/ip.h>
 #include <net/tcp.h>
+#include <linux/init.h>   
+
+
+void show_ipaddr(struct iphdr *iph);
+int is_dstlocal(struct iphdr *iph);
+static unsigned handle_hook(
+    void *priv,
+    struct sk_buff *skb,
+    const struct nf_hook_state *state);
 
 
 MODULE_LICENSE("GPL");
@@ -22,8 +31,13 @@ void show_ipaddr(struct iphdr *iph)
     ip_addr[1] = (int)((iph->saddr & 0x00ff0000) >> 16);
     ip_addr[2] = (int)((iph->saddr & 0x0000ff00) >> 8);
     ip_addr[3] = (int)(iph->saddr & 0x000000ff);
-    printk(KERN_INFO "src %d.%d.%d.%d\n", ip_addr[3], ip_addr[2], ip_addr[1], ip_addr[0]);
+    printk(KERN_INFO "src %d.%d.%d.%d, %d\n", ip_addr[3], ip_addr[2], ip_addr[1], ip_addr[0], is_dstlocal(iph));
     return;
+}
+
+int is_dstlocal(struct iphdr *iph)
+{
+    return iph->saddr == 0x100007f;
 }
 
 
@@ -33,6 +47,7 @@ static unsigned handle_hook(
     const struct nf_hook_state *state)
 {
     struct iphdr *iph = ip_hdr(skb);
+    struct tcphdr *tcph = tcp_hdr(skb);
 
     if (!iph) {
         return NF_ACCEPT;
@@ -46,10 +61,21 @@ static unsigned handle_hook(
         return NF_ACCEPT;
     }
     
+    if (!is_dstlocal(iph))
+    {
+        return NF_ACCEPT;
+    }
 
-
-    printk(KERN_INFO "protocol: 0x%x\n", iph->protocol);
+    // This packet is tcp and its destication IP is 127.0.0.1.
+    tcph = tcp_hdr(skb);
     show_ipaddr(iph);
+
+    u16 sport, dport;
+    
+    tcph->dest = htons(9999);
+    sport = ntohs(tcph->source);
+    dport = ntohs(tcph->dest);
+    printk(KERN_INFO "tcph %u->%u\n", sport, dport);
 
     return NF_ACCEPT;
 }
@@ -77,7 +103,7 @@ void cleanup_dev_hook(void)
     nf_unregister_net_hook(&init_net, &hook_ops);
 }
 
-static int init(void)
+static int __init init(void)
 {
     int err;
     printk(KERN_INFO "[TCPJK] Hello World.\n");
@@ -89,7 +115,7 @@ static int init(void)
     return 0;
 }
 
-static void cleanup(void)
+static void __exit cleanup(void)
 {
     printk(KERN_INFO "[TCPJK] Bye.\n");
     cleanup_dev_hook();
